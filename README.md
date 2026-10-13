@@ -30,6 +30,8 @@ Koharu introduces a local-first workflow for manga translation, utilizing the po
 ## Features
 
 ### Extras (Refer Project Wiki for more details)
+- **Better error handling and reporting for Translation:** Prevent complete failure of translation pipeline by skipping the specific page. The Old implementation would fail without any indication of progress before failure.
+- **Translation pipeline summary:** Pipeline summary with errors for failed pages, success/failed counts and retry for failed pages.
 - **Translation Import/Export:** JSON-based translation exchange with page-level granularity for collaborative workflows.
 - **Project Archiving:** Organise projects easily with archives.
 - **Rectangle Selection for Eraser & Remove Tools:** Precise region selection for targeted cleanup and inpainting.
