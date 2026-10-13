@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use koharu_agent::{Control, Host, Invocation, Tool, ToolCall};
 use koharu_desktop::{Desktop, Frame};
-use koharu_pipeline::{Committer, Operation, RunStatus, Scope, Stage, StageOutput, StopToken};
+use koharu_pipeline::{Committer, Operation, Scope, Stage, StageOutput, StopToken};
 use koharu_scene::{Commit, EntityId, Snapshot};
 use schemars::{JsonSchema, schema_for};
 use serde::Deserialize;
@@ -162,16 +162,15 @@ impl KoharuHost {
             .await;
         watcher.abort();
         self.handle.state::<Processing>().stops.lock().remove(&job);
-        let report = result.map_err(|error| anyhow!(error))?;
-        if report.status == RunStatus::Stopped {
-            bail!("pipeline processing was cancelled");
-        }
+        let pipeline_result = result.map_err(|error| anyhow!(error))?;
         Invocation::changed(json!({
-            "base_revision": report.base,
-            "final_revision": report.final_revision,
-            "completed": report.completed,
-            "total": report.total,
-            "elapsed_ms": report.elapsed.as_millis(),
+            "successful_pages": pipeline_result.successful_pages.len(),
+            "failed_pages": pipeline_result.errors.len(),
+            "errors": pipeline_result.errors.iter().map(|e| json!({
+                "page": e.page.to_string(),
+                "stage": e.stage.to_string(),
+                "error": e.error,
+            })).collect::<Vec<_>>(),
         }))
     }
 }

@@ -183,7 +183,7 @@ async fn main() -> Result<()> {
     )?;
     let snapshot = session.snapshot();
     let mut committer = SessionCommitter(&mut session);
-    let report = pipeline
+    let result = pipeline
         .execute(
             snapshot,
             Request {
@@ -199,7 +199,7 @@ async fn main() -> Result<()> {
             &mut committer,
         )
         .await?;
-    eprintln!("pipeline finished in {:.2}s", report.elapsed.as_secs_f64());
+    eprintln!("pipeline finished: {} successful, {} errors", result.successful_pages.len(), result.errors.len());
 
     let renderer = Renderer::new()?;
     let render_started = Instant::now();

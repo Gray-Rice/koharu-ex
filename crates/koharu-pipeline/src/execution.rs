@@ -1,15 +1,15 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
-    time::Instant,
 };
 
 use anyhow::{Context as _, Result, ensure};
+use chrono::{DateTime, Utc};
 use futures::{StreamExt as _, stream::FuturesUnordered};
 use koharu_scene::{EntityId, Snapshot};
 
 use crate::{
-    Committer, ErrorKind, PipelineError, Progress, ProgressSink, Report, Request, RunStatus, Stage,
+    Committer, ErrorKind, PipelineError, Progress, ProgressSink, Request, Stage,
     StageOutput, StopToken,
     images::ImageCache,
     progress,
@@ -19,6 +19,23 @@ use crate::{
     stage_runner::{StageCompletion, StageJob, StageOutcome, StageRunner},
     stages::StageInput,
 };
+
+/// Error information for a single page that failed during pipeline execution.
+#[derive(Debug, Clone)]
+pub struct PageError {
+    pub page: EntityId,
+    pub stage: Stage,
+    pub error: String,
+    pub output: Option<String>,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Result of pipeline execution containing both successful pages and collected errors.
+#[derive(Debug, Clone)]
+pub struct PipelineResult {
+    pub successful_pages: Vec<EntityId>,
+    pub errors: Vec<PageError>,
+}
 
 pub(crate) struct Execution<'a> {
     runner: Arc<StageRunner>,
@@ -32,9 +49,7 @@ pub(crate) struct Execution<'a> {
     images: BTreeMap<EntityId, Arc<ImageCache>>,
     busy_stages: BTreeSet<Stage>,
     completed: usize,
-    failure: Option<PipelineError>,
-    base: koharu_scene::Revision,
-    started: Instant,
+    page_errors: Vec<PageError>,
     inpainting_mask: Option<crate::InpaintingMask>,
 }
 
@@ -46,8 +61,6 @@ impl<'a> Execution<'a> {
         request: Request,
         committer: &'a mut dyn Committer,
     ) -> std::result::Result<Self, PipelineError> {
-        let started = Instant::now();
-        let base = snapshot.revision();
         let stages = request
             .operation
             .stages()
@@ -84,16 +97,18 @@ impl<'a> Execution<'a> {
             images: BTreeMap::new(),
             busy_stages: BTreeSet::new(),
             completed: 0,
-            failure: None,
-            base,
-            started,
+            page_errors: Vec::new(),
             inpainting_mask: request.inpainting_mask,
         })
     }
 
-    pub(crate) async fn run(mut self) -> std::result::Result<Report, PipelineError> {
+    pub(crate) async fn run(mut self) -> std::result::Result<PipelineResult, PipelineError> {
         if self.stopped() {
-            return Ok(self.report(RunStatus::Stopped));
+            let successful_pages = self.scheduler.successful_pages();
+            return Ok(PipelineResult {
+                successful_pages,
+                errors: self.page_errors,
+            });
         }
 
         self.resources.start();
@@ -109,12 +124,14 @@ impl<'a> Execution<'a> {
             let Some(completion) = running.next().await else {
                 break;
             };
-            self.busy_stages.remove(&completion.stage);
-            if self.stopped() || self.failure.is_some() {
+            let page = completion.page;
+            let stage = completion.stage;
+            self.busy_stages.remove(&stage);
+            if self.stopped() {
                 continue;
             }
             if let Err(error) = self.apply_completion(completion).await {
-                self.failure = Some(error);
+                self.record_page_error(page, stage, error);
             }
         }
 
@@ -122,7 +139,7 @@ impl<'a> Execution<'a> {
     }
 
     fn take_ready_job(&mut self) -> Option<StageJob> {
-        if self.stopped() || self.failure.is_some() {
+        if self.stopped() {
             return None;
         }
         let (page, stage) = self.scheduler.start_next(&self.busy_stages)?;
@@ -186,6 +203,36 @@ impl<'a> Execution<'a> {
         Ok(())
     }
 
+    fn record_page_error(&mut self, page: EntityId, stage: Stage, error: PipelineError) {
+        let page_error = PageError {
+            page,
+            stage,
+            error: error.to_string(),
+            output: None,
+            timestamp: Utc::now(),
+        };
+
+        progress::emit(
+            self.progress.as_ref(),
+            Progress::Failed {
+                page: page_error.page,
+                stage: page_error.stage,
+                error: page_error.error.clone(),
+                output: page_error.output.clone(),
+            },
+        );
+
+        self.scheduler.fail_stage(page, stage);
+        self.page_errors.push(page_error);
+    }
+
+    fn mark_complete(&mut self, page: EntityId, stage: Stage) {
+        if self.scheduler.complete_stage(page, stage) {
+            self.images.remove(&page);
+        }
+        self.completed += 1;
+    }
+
     async fn commit_patch(
         &mut self,
         page: EntityId,
@@ -216,49 +263,20 @@ impl<'a> Execution<'a> {
         Ok(true)
     }
 
-    fn mark_complete(&mut self, page: EntityId, stage: Stage) {
-        if self.scheduler.complete_stage(page, stage) {
-            self.images.remove(&page);
-        }
-        self.completed += 1;
-    }
-
     fn stopped(&self) -> bool {
         self.stop.stopped()
     }
 
-    fn finalize(mut self) -> std::result::Result<Report, PipelineError> {
-        if let Some(error) = self.failure.take() {
-            return Err(error);
-        }
-        if !self.stopped() && self.completed != self.scheduler.total() {
-            return Err(PipelineError::new(
-                ErrorKind::InvalidOutput,
-                None,
-                anyhow::anyhow!(
-                    "pipeline scheduler stopped after {} of {} work items",
-                    self.completed,
-                    self.scheduler.total()
-                ),
-            ));
-        }
-        let status = if self.stopped() {
-            RunStatus::Stopped
-        } else {
-            RunStatus::Completed
-        };
-        Ok(self.report(status))
-    }
+    // A stop is a partial success, not a failure: pages that finished before
+    // the stop are reported, matching the early-return path for a stop that
+    // happens before any work starts.
+    fn finalize(self) -> std::result::Result<PipelineResult, PipelineError> {
+        let successful_pages = self.scheduler.successful_pages();
 
-    fn report(&self, status: RunStatus) -> Report {
-        Report {
-            status,
-            base: self.base,
-            final_revision: self.scene.revision(),
-            completed: self.completed,
-            total: self.scheduler.total(),
-            elapsed: self.started.elapsed(),
-        }
+        Ok(PipelineResult {
+            successful_pages,
+            errors: self.page_errors,
+        })
     }
 }
 

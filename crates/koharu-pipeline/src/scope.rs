@@ -204,7 +204,7 @@ pub(crate) fn contains_entity(
         .is_some_and(|geometry| bounds.intersects(&geometry)))
 }
 
-fn containing_page(snapshot: &Snapshot, mut entity: EntityId) -> Result<EntityId> {
+pub fn containing_page(snapshot: &Snapshot, mut entity: EntityId) -> Result<EntityId> {
     loop {
         if snapshot.page(entity).is_ok() {
             return Ok(entity);

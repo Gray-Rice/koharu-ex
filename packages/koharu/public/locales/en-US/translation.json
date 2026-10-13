@@ -16,7 +16,22 @@
     "processing": "Processing",
     "processingFailed": "Processing failed.",
     "stop": "Stop",
-    "title": "Activity"
+    "title": "Activity",
+    "finishedWithErrors": "Finished with errors",
+    "viewSummary": "View summary"
+  },
+  "pipeline": {
+    "summary": {
+      "title": "Pipeline Summary",
+      "total": "Total",
+      "successful": "Successful",
+      "failed": "Failed",
+      "failedPages": "Failed Pages",
+      "pageNumber": "Page {{number}}",
+      "error": "Error",
+      "output": "Output",
+      "retryFailed": "Retry Failed"
+    }
   },
   "agent": {
     "account": "ChatGPT account",
@@ -69,6 +84,7 @@
     "back": "Back",
     "cancel": "Cancel",
     "clearSearch": "Clear search",
+    "dismiss": "Dismiss",
     "loading": "Loading…",
     "reset": "Reset"
   },

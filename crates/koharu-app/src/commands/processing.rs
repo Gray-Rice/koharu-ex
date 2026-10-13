@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt, sync::Arc};
 
 use anyhow::{Context as _, Result};
-use koharu_pipeline::{Committer, Progress, RunStatus, StageOutput, StopToken};
+use koharu_pipeline::{Committer, Progress, StageOutput, StopToken};
 use koharu_scene::Snapshot;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -48,6 +48,31 @@ pub struct Job {
     pub stage: Option<koharu_pipeline::Stage>,
     pub model: Option<String>,
     pub error: Option<String>,
+    // New fields for page-level errors
+    pub page_error: Option<PageErrorInfo>,
+    pub pipeline_summary: Option<PipelineSummary>,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct PageErrorInfo {
+    pub page_id: String,
+    pub page_name: Option<String>,
+    #[specta(type = Option<f64>)]
+    pub page_index: Option<usize>,
+    pub stage: koharu_pipeline::Stage,
+    pub error: String,
+    pub output: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Type)]
+pub struct PipelineSummary {
+    #[specta(type = f64)]
+    pub total_pages: usize,
+    #[specta(type = f64)]
+    pub successful_pages: usize,
+    #[specta(type = f64)]
+    pub failed_pages: usize,
+    pub errors: Vec<PageErrorInfo>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Type)]
@@ -56,7 +81,8 @@ pub enum JobState {
     Running,
     Finished,
     Failed,
-    Stopped,
+    PageFailed,
+    FinishedWithErrors,
 }
 
 #[derive(Default)]
@@ -69,6 +95,25 @@ pub(crate) struct Processing {
 #[derive(Default)]
 pub(crate) struct JobChannel {
     pub(crate) channel: Mutex<Option<Channel<Job>>>,
+}
+
+/// Extract page IDs from a Scope enum.
+fn scope_pages(scope: &koharu_pipeline::Scope, snapshot: &Snapshot) -> Vec<koharu_scene::EntityId> {
+    use koharu_pipeline::Scope;
+    match scope {
+        Scope::Project => snapshot.pages().map(|page| page.id()).collect(),
+        Scope::Pages(pages) => pages.clone(),
+        Scope::Region { page, .. } => vec![*page],
+        Scope::Entities(entities) => {
+            let mut page_set = std::collections::BTreeSet::new();
+            for entity in entities {
+                if let Ok(page) = koharu_pipeline::containing_page(snapshot, *entity) {
+                    page_set.insert(page);
+                }
+            }
+            page_set.into_iter().collect()
+        }
+    }
 }
 
 #[tauri::command]
@@ -107,6 +152,8 @@ pub(crate) async fn process(
         stage: None,
         model: None,
         error: None,
+        page_error: None,
+        pipeline_summary: None,
     };
     processing.jobs.lock().insert(id, job.clone());
     job_channel.channel.publish(job);
@@ -114,6 +161,20 @@ pub(crate) async fn process(
     let pipeline = handle.state::<koharu_pipeline::Pipeline>().inner().clone();
     let task_handle = handle.clone();
     let inpainting_mask = processing.inpainting_mask.lock().take();
+
+    // Get scope pages and page names before moving scope into request
+    let scope_pages = scope_pages(&scope, &snapshot);
+    let page_names: std::collections::HashMap<koharu_scene::EntityId, String> = scope_pages
+        .iter()
+        .filter_map(|page_id| {
+            snapshot
+                .page(*page_id)
+                .ok()
+                .and_then(|p| p.page().ok())
+                .map(|p| (*page_id, p.label))
+        })
+        .collect();
+
     drop(tokio::spawn(async move {
         let progress = Arc::new(Mutex::new((0_usize, 0_usize)));
         let progress_handle = task_handle.clone();
@@ -185,6 +246,16 @@ pub(crate) async fn process(
                     );
                     None
                 }
+                Progress::Failed { stage, error, .. } => {
+                    tracing::info!(
+                        target: "koharu_metrics",
+                        metric = "stage_failed",
+                        stage = %stage,
+                        error = %error,
+                    );
+                    // Don't update progress counter for failed pages - they're handled in the final result
+                    None
+                }
             };
             if let Some((completed, total, page, stage, model)) = update {
                 let job = {
@@ -235,44 +306,121 @@ pub(crate) async fn process(
         let mut committer = PipelineCommitter {
             handle: task_handle.clone(),
         };
+
         let result = pipeline.execute(snapshot, request, &mut committer).await;
-        let (stopped, error) = match result {
-            Ok(report) => (report.status == RunStatus::Stopped, None),
-            Err(error) => {
-                tracing::error!(stage = ?error.stage, %error, "processing failed");
-                (false, Some(format!("{error:#}")))
-            }
-        };
-        tracing::info!(
-            target: "koharu_metrics",
-            metric = "pipeline_result",
-            outcome = if stopped {
-                "stopped"
-            } else if error.is_some() {
-                "failed"
-            } else {
-                "completed"
-            },
-        );
-        task_handle.state::<Processing>().stops.lock().remove(&id);
-        let job = task_handle
-            .state::<Processing>()
-            .jobs
-            .lock()
-            .remove(&id)
-            .map(|mut job| {
-                job.state = if stopped {
-                    JobState::Stopped
-                } else if error.is_some() {
-                    JobState::Failed
+
+        // Handle the pipeline result
+        match result {
+            Ok(pipeline_result) => {
+                let has_errors = !pipeline_result.errors.is_empty();
+
+                // Emit PageFailed events for each error
+                for page_error in &pipeline_result.errors {
+                    // Get page name from pre-fetched map
+                    let page_name = page_names.get(&page_error.page).cloned();
+
+                    // Get page index (1-based)
+                    let page_index = scope_pages.iter().position(|p| p == &page_error.page).map(|i| i + 1);
+
+                    let page_error_info = PageErrorInfo {
+                        page_id: page_error.page.to_string(),
+                        page_name,
+                        page_index,
+                        stage: page_error.stage,
+                        error: page_error.error.clone(),
+                        output: page_error.output.clone(),
+                    };
+
+                    let job = Job {
+                        id,
+                        state: JobState::PageFailed,
+                        completed: pipeline_result.successful_pages.len(),
+                        total: pipeline_result.successful_pages.len() + pipeline_result.errors.len(),
+                        page: Some(page_error.page),
+                        stage: Some(page_error.stage),
+                        model: None,
+                        error: Some(page_error.error.clone()),
+                        page_error: Some(page_error_info),
+                        pipeline_summary: None,
+                    };
+                    task_handle.state::<JobChannel>().channel.publish(job);
+                }
+
+                // Create pipeline summary
+                let summary = PipelineSummary {
+                    total_pages: pipeline_result.successful_pages.len() + pipeline_result.errors.len(),
+                    successful_pages: pipeline_result.successful_pages.len(),
+                    failed_pages: pipeline_result.errors.len(),
+                    errors: pipeline_result.errors.iter().map(|e| {
+                        let page_name = page_names.get(&e.page).cloned();
+                        let page_index = scope_pages.iter().position(|p| p == &e.page).map(|i| i + 1);
+                        PageErrorInfo {
+                            page_id: e.page.to_string(),
+                            page_name,
+                            page_index,
+                            stage: e.stage,
+                            error: e.error.clone(),
+                            output: e.output.clone(),
+                        }
+                    }).collect(),
+                };
+
+                // Emit final job state
+                let final_state = if has_errors {
+                    JobState::FinishedWithErrors
                 } else {
                     JobState::Finished
                 };
-                job.error = error;
-                job
-            });
-        if let Some(job) = job {
-            task_handle.state::<JobChannel>().channel.publish(job);
+
+                tracing::info!(
+                    target: "koharu_metrics",
+                    metric = "pipeline_result",
+                    outcome = if has_errors { "completed_with_errors" } else { "completed" },
+                    successful = pipeline_result.successful_pages.len(),
+                    failed = pipeline_result.errors.len(),
+                );
+
+                task_handle.state::<Processing>().stops.lock().remove(&id);
+                let job = task_handle
+                    .state::<Processing>()
+                    .jobs
+                    .lock()
+                    .remove(&id)
+                    .map(|mut job| {
+                        job.state = final_state;
+                        job.error = if has_errors { Some(format!("{} page(s) failed", pipeline_result.errors.len())) } else { None };
+                        job.pipeline_summary = Some(summary);
+                        job
+                    });
+                if let Some(job) = job {
+                    task_handle.state::<JobChannel>().channel.publish(job);
+                }
+            }
+            Err(error) => {
+                // This is a pipeline-level error (not per-page)
+                tracing::error!(stage = ?error.stage, %error, "processing failed");
+
+                tracing::info!(
+                    target: "koharu_metrics",
+                    metric = "pipeline_result",
+                    outcome = "failed",
+                );
+
+                task_handle.state::<Processing>().stops.lock().remove(&id);
+                let job = task_handle
+                    .state::<Processing>()
+                    .jobs
+                    .lock()
+                    .remove(&id)
+                    .map(|mut job| {
+                        job.state = JobState::Failed;
+                        job.error = Some(format!("{error:#}"));
+                        job
+                    });
+                if let Some(job) = job {
+                    task_handle.state::<JobChannel>().channel.publish(job);
+                }
+            }
         }
     }));
     Ok(id)

@@ -1,19 +1,22 @@
 'use client'
 
 import { useMutationState } from '@tanstack/react-query'
-import { CircleAlert, Download, LoaderCircle, Square, X } from 'lucide-react'
+import { CircleAlert, CheckCircle, Download, Eye, LoaderCircle, Square, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useState } from 'react'
 
 import { call } from '@/lib/backend'
 import { usePages } from '@/lib/queries'
 import { useKoharuStore } from '@/lib/store'
 import { commands, type Download as DownloadState, type Job } from '@koharu/bridge/protocol'
 import { Button } from '@koharu/ui/components/button'
+import { PipelineSummary } from './PipelineSummary'
 
 export function ActivityCenter() {
   const { t } = useTranslation()
   const jobs = useKoharuStore((state) => state.jobs)
   const downloads = useKoharuStore((state) => state.downloads)
+  const dismissJob = useKoharuStore((state) => state.dismissJob)
   const activities = useMutationState({
     filters: { status: 'pending' },
     select: (mutation) => ({
@@ -24,39 +27,43 @@ export function ActivityCenter() {
     (activity): activity is { id: number; label: string } => typeof activity.label === 'string',
   )
   const visibleJobs = Object.values(jobs).filter(
-    (job) => job.state === 'running' || job.state === 'failed',
+    (job) => job.state === 'running' || job.state === 'failed' || job.state === 'finished_with_errors',
   )
   const runningDownloads = Object.values(downloads).filter(
     (download) => download.state === 'running',
   )
   const failedDownloads = Object.values(downloads).filter((download) => download.state === 'failed')
   const visibleDownloads = [...runningDownloads, ...failedDownloads]
+
+  const [summaryJob, setSummaryJob] = useState<Job | null>(null)
+
   if (activities.length === 0 && visibleJobs.length === 0 && visibleDownloads.length === 0)
     return null
 
   return (
-    <aside
-      aria-label={t('activity.title')}
-      className='absolute right-3 bottom-9 z-30 flex w-72 max-w-[calc(100%-1.5rem)] flex-col rounded-2xl border border-border/50 bg-popover shadow-md'
-    >
-      <div className='border-b px-3 py-2'>
-        <span className='text-[10px] font-semibold tracking-[0.1em] uppercase'>
-          {t('activity.title')}
-        </span>
-      </div>
-      {activities.map((activity) => (
-        <div
-          key={activity.id}
-          role='status'
-          className='grid grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2.5 border-b p-3 last:border-b-0'
-        >
-          <LoaderCircle
-            className='size-3.5 animate-spin justify-self-center text-primary motion-reduce:animate-none'
-            aria-hidden='true'
-          />
-          <span className='truncate text-[12px] font-medium'>{t(activity.label)}</span>
+    <>
+      <aside
+        aria-label={t('activity.title')}
+        className='absolute right-3 bottom-9 z-30 flex w-72 max-w-[calc(100%-1.5rem)] flex-col rounded-2xl border border-border/50 bg-popover shadow-md'
+      >
+        <div className='border-b px-3 py-2'>
+          <span className='text-[10px] font-semibold tracking-[0.1em] uppercase'>
+            {t('activity.title')}
+          </span>
         </div>
-      ))}
+        {activities.map((activity) => (
+          <div
+            key={activity.id}
+            role='status'
+            className='grid grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2.5 border-b p-3 last:border-b-0'
+          >
+            <LoaderCircle
+              className='size-3.5 animate-spin justify-self-center text-primary motion-reduce:animate-none'
+              aria-hidden='true'
+            />
+            <span className='truncate text-[12px] font-medium'>{t(activity.label)}</span>
+          </div>
+        ))}
       {runningDownloads.length > 1 ? (
         <DownloadGroup downloads={runningDownloads} />
       ) : (
@@ -66,9 +73,27 @@ export function ActivityCenter() {
         <DownloadItem key={download.id} download={download} />
       ))}
       {visibleJobs.map((job) => (
-        <JobItem key={job.id} job={job} />
+        <JobItem
+          key={job.id}
+          job={job}
+          onViewSummary={setSummaryJob}
+          onDismiss={() => {
+            dismissJob(job.id)
+            setSummaryJob((current) => (current?.id === job.id ? null : current))
+          }}
+        />
       ))}
     </aside>
+    {summaryJob && (
+      <PipelineSummary
+        job={summaryJob}
+        onDismiss={() => {
+          dismissJob(summaryJob.id)
+          setSummaryJob(null)
+        }}
+      />
+    )}
+  </>
   )
 }
 
@@ -101,9 +126,16 @@ function DownloadGroup({ downloads }: { downloads: DownloadState[] }) {
   )
 }
 
-function JobItem({ job }: { job: Job }) {
+function JobItem({
+  job,
+  onViewSummary,
+  onDismiss,
+}: {
+  job: Job
+  onViewSummary: (job: Job) => void
+  onDismiss: () => void
+}) {
   const { t } = useTranslation()
-  const dismiss = useKoharuStore((state) => state.dismissJob)
   // The pipeline reports which page it is on; the rail has already loaded the
   // labels, so this resolves from cache rather than fetching.
   const pages = usePages(job.page !== null).data
@@ -118,8 +150,56 @@ function JobItem({ job }: { job: Job }) {
     return (
       <Failure
         message={job.error || t('activity.processingFailed')}
-        onDismiss={() => dismiss(job.id)}
+        onDismiss={onDismiss}
       />
+    )
+  }
+  if (job.state === 'finished_with_errors') {
+    return (
+      <div className='border-b p-3 last:border-b-0'>
+        <div className='grid grid-cols-[1rem_minmax(0,1fr)_2.25rem_1.5rem] items-start gap-x-2.5'>
+          <CheckCircle className='mt-1.5 size-3.5 justify-self-center text-yellow-500' />
+          <div className='min-w-0'>
+            <span className='block truncate text-[12px] font-medium capitalize'>
+              {t('activity.finishedWithErrors')}
+            </span>
+          </div>
+          <span className='pt-0.5 text-right text-[10px] tabular-nums text-yellow-500'>
+            {job.pipeline_summary ? `${job.pipeline_summary.successful_pages}/${job.pipeline_summary.total_pages}` : ''}
+          </span>
+          <Button
+            size='icon-xs'
+            variant='ghost'
+            className='-mt-1'
+            aria-label={t('activity.dismiss')}
+            onClick={onDismiss}
+          >
+            <X />
+          </Button>
+          {pageLabel ? (
+            <p className='col-start-2 col-end-4 mt-0.5 truncate text-[10px] text-muted-foreground'>
+              {pageLabel}
+            </p>
+          ) : null}
+          {job.model ? (
+            <p className='col-start-2 col-end-4 truncate text-[10px] text-muted-foreground'>
+              {job.model}
+            </p>
+          ) : null}
+          <div className='col-start-2 col-end-4'>
+            <Progress value={100} />
+          </div>
+          <Button
+            size='icon-xs'
+            variant='ghost'
+            className='mt-1'
+            aria-label={t('activity.viewSummary')}
+            onClick={() => onViewSummary(job)}
+          >
+            <Eye className='size-3.5' />
+          </Button>
+        </div>
+      </div>
     )
   }
   const percent = progress(job.completed, job.total)

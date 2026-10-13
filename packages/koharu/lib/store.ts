@@ -45,6 +45,8 @@ interface KoharuStore {
   resources: ModelResources | null
   jobs: Record<string, Job>
   downloads: Record<string, Download>
+  dismissedJobs: Set<string>
+  dismissedDownloads: Set<string>
   camera: { zoom: number; translation: [number, number]; fitted: boolean }
   canvasPage: EntityId | null
   canvasRevision: number | null
@@ -91,6 +93,8 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   preferences: null,
   translationModels: [],
   resources: null,
+  dismissedJobs: new Set<string>(),
+  dismissedDownloads: new Set<string>(),
   jobs: {},
   downloads: {},
   camera: { zoom: 1, translation: [0, 0], fitted: true },
@@ -126,21 +130,22 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
     set((state) => {
       const jobs = { ...state.jobs }
       delete jobs[id]
-      return { jobs }
+      return { jobs, dismissedJobs: new Set(state.dismissedJobs).add(id) }
     }),
   dismissDownload: (id) =>
     set((state) => {
       const downloads = { ...state.downloads }
       delete downloads[String(id)]
-      return { downloads }
+      return { downloads, dismissedDownloads: new Set(state.dismissedDownloads).add(String(id)) }
     }),
 }))
 
 export function receiveStartupState(state: StartupState): void {
+  const { dismissedJobs } = useKoharuStore.getState()
   useKoharuStore.setState({
     initialized: true,
     preferences: state.preferences,
-    jobs: byId(state.jobs),
+    jobs: byId(state.jobs.filter((job) => !dismissedJobs.has(String(job.id)))),
     ...canvasSnapshot(state.canvas),
   })
 }
@@ -150,14 +155,19 @@ export function receiveCanvas(canvas: CanvasState): void {
 }
 
 export function receiveJob(job: Job): void {
-  useKoharuStore.setState((state) => ({ jobs: { ...state.jobs, [job.id]: job } }))
+  useKoharuStore.setState((state) => {
+    if (state.dismissedJobs.has(job.id)) return state
+    return { jobs: { ...state.jobs, [job.id]: job } }
+  })
 }
 
 export function receiveDownload(download: Download): void {
   useKoharuStore.setState((state) => {
+    const id = String(download.id)
+    if (state.dismissedDownloads.has(id)) return state
     const downloads = { ...state.downloads }
-    if (download.state === 'finished') delete downloads[String(download.id)]
-    else downloads[String(download.id)] = download
+    if (download.state === 'finished') delete downloads[id]
+    else downloads[id] = download
     return { downloads }
   })
 }
@@ -175,7 +185,7 @@ export function receiveResources(resources: ModelResources): void {
 }
 
 export function receiveError(message: string): void {
-  toast.add({ type: 'error', title: 'Could not complete that action', description: message })
+  toast.add({ title: message, type: 'error' })
 }
 
 function canvasSnapshot(canvas: CanvasState) {

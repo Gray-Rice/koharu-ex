@@ -125,6 +125,8 @@ describe('Tauri runtime', () => {
         stage: 'detection',
         model: 'model',
         error: null,
+        page_error: null,
+        pipeline_summary: null,
       })
     })
 
@@ -190,6 +192,8 @@ describe('Tauri runtime', () => {
       stage: 'ocr',
       model: 'model',
       error: null,
+      page_error: null,
+      pipeline_summary: null,
     })
 
     expect(await screen.findByText('Book')).toBeInTheDocument()

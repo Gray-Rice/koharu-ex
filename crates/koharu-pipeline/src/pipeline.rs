@@ -6,7 +6,7 @@ use koharu_config::Config;
 use koharu_scene::Snapshot;
 
 use crate::{
-    Committer, PipelineConfig, PipelineError, Report, Request, ResourceSnapshot,
+    Committer, PipelineConfig, PipelineError, PipelineResult, Request, ResourceSnapshot,
     execution::Execution, resources::ResourceMonitor, stage_runner::StageRunner,
 };
 
@@ -78,7 +78,7 @@ impl Pipeline {
         snapshot: Snapshot,
         request: Request,
         committer: &mut dyn Committer,
-    ) -> std::result::Result<Report, PipelineError> {
+    ) -> std::result::Result<PipelineResult, PipelineError> {
         let _execution = self.execution.lock().await;
         Execution::new(
             self.current.load_full(),

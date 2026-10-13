@@ -17,7 +17,7 @@ async fn stop_is_a_successful_partial_result() {
     };
     let mut committer = RejectCommitter;
 
-    let report = pipeline
+    let result = pipeline
         .execute(
             koharu_scene::Session::memory().await.unwrap().snapshot(),
             request,
@@ -26,8 +26,8 @@ async fn stop_is_a_successful_partial_result() {
         .await
         .unwrap();
 
-    assert_eq!(report.status, RunStatus::Stopped);
-    assert_eq!(report.completed, 0);
+    assert!(result.errors.is_empty());
+    assert_eq!(result.successful_pages.len(), 0);
 }
 
 #[tokio::test]
@@ -75,14 +75,13 @@ async fn stop_after_a_page_keeps_completed_progress() {
     };
     let mut committer = RejectCommitter;
 
-    let report = pipeline
+    let result = pipeline
         .execute(session.snapshot(), request, &mut committer)
         .await
         .unwrap();
 
-    assert_eq!(report.status, RunStatus::Stopped);
-    assert_eq!(report.completed, 1);
-    assert_eq!(report.total, 2);
+    assert_eq!(result.successful_pages.len(), 1);
+    assert!(result.errors.is_empty());
 }
 
 struct RejectCommitter;

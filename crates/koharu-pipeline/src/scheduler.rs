@@ -9,6 +9,7 @@ enum WorkState {
     Pending,
     Running,
     Finished,
+    Failed,
 }
 
 struct StageWork {
@@ -31,7 +32,7 @@ impl PageWork {
     fn finished(&self) -> bool {
         self.stages
             .iter()
-            .all(|work| work.state == WorkState::Finished)
+            .all(|work| work.state == WorkState::Finished || work.state == WorkState::Failed)
     }
 
     fn ready(&self, index: usize) -> bool {
@@ -41,7 +42,7 @@ impl PageWork {
         self.stages
             .iter()
             .find(|work| work.stage == prerequisite)
-            .is_none_or(|work| work.state == WorkState::Finished)
+            .is_none_or(|work| work.state == WorkState::Finished || work.state == WorkState::Failed)
     }
 }
 
@@ -51,7 +52,6 @@ pub(crate) struct Scheduler {
     page_window: usize,
     active_pages: usize,
     head: usize,
-    total: usize,
 }
 
 impl Scheduler {
@@ -69,7 +69,6 @@ impl Scheduler {
                     .collect(),
             })
             .collect::<Vec<_>>();
-        let total = pages.len().saturating_mul(stages.len());
         Self {
             page_index: pages
                 .iter()
@@ -80,12 +79,17 @@ impl Scheduler {
             page_window: stages.len().max(1),
             active_pages: 0,
             head: 0,
-            total,
         }
     }
 
-    pub(crate) fn total(&self) -> usize {
-        self.total
+    // A page is successful only when every stage finished; a failed stage
+    // means the page failed, so it must not be counted here.
+    pub(crate) fn successful_pages(&self) -> Vec<EntityId> {
+        self.pages
+            .iter()
+            .filter(|p| p.stages.iter().all(|work| work.state == WorkState::Finished))
+            .map(|p| p.page)
+            .collect()
     }
 
     pub(crate) fn start_next(
@@ -130,6 +134,25 @@ impl Scheduler {
         let was_finished = page.finished();
         if let Some(work) = page.stages.iter_mut().find(|work| work.stage == stage) {
             work.state = WorkState::Finished;
+        }
+        let page_finished = !was_finished && page.finished();
+        if page_finished {
+            self.active_pages = self.active_pages.saturating_sub(1);
+            while self.head < self.pages.len() && self.pages[self.head].finished() {
+                self.head += 1;
+            }
+        }
+        page_finished
+    }
+
+    pub(crate) fn fail_stage(&mut self, page: EntityId, stage: Stage) -> bool {
+        let Some(&page_index) = self.page_index.get(&page) else {
+            return false;
+        };
+        let page = &mut self.pages[page_index];
+        let was_finished = page.finished();
+        if let Some(work) = page.stages.iter_mut().find(|work| work.stage == stage) {
+            work.state = WorkState::Failed;
         }
         let page_finished = !was_finished && page.finished();
         if page_finished {

@@ -29,6 +29,12 @@ pub enum Progress {
         page: EntityId,
         stage: Stage,
     },
+    Failed {
+        page: EntityId,
+        stage: Stage,
+        error: String,
+        output: Option<String>,
+    },
 }
 
 pub type ProgressSink = Arc<dyn Fn(Progress) + Send + Sync>;

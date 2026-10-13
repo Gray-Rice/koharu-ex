@@ -1847,6 +1847,8 @@ describe('greenfield editor', () => {
           stage: 'ocr',
           model: 'manga-ocr',
           error: null,
+          page_error: null,
+          pipeline_summary: null,
         },
       },
     })
