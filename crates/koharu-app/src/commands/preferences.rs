@@ -1,14 +1,16 @@
 use std::fmt;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use koharu_pipeline::PipelineConfig;
 use koharu_renderer::TypesettingConfig;
 use koharu_secrets::ExposeSecret as _;
 use koharu_translator::{Language, Model, Provider, ProviderConfig, ProvidersConfig};
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use tauri::State;
 
-use super::Error;
+use super::{Error, project::ProjectLibrary};
+use crate::config::ProjectsConfig;
 
 #[derive(Clone, Debug, Serialize, Type)]
 pub struct Preferences {
@@ -16,6 +18,7 @@ pub struct Preferences {
     pub providers: ProviderPreferences,
     pub typesetting: TypesettingConfig,
     pub languages: Vec<LanguageChoice>,
+    pub project_directory: String,
 }
 
 impl Preferences {
@@ -23,9 +26,11 @@ impl Preferences {
         let pipeline = PipelineConfig::load()?;
         let providers = ProvidersConfig::load()?;
         let typesetting = TypesettingConfig::load()?;
+        let projects = ProjectsConfig::load()?;
         let pipeline = pipeline.read()?;
         let providers = providers.read()?;
         let typesetting = typesetting.read()?;
+        let projects = projects.read()?;
         Ok(Self {
             pipeline: pipeline.clone(),
             providers: ProviderPreferences::from_config(&providers)?,
@@ -37,6 +42,7 @@ impl Preferences {
                     name: language.to_string(),
                 })
                 .collect(),
+            project_directory: projects.project_dir()?.to_string_lossy().to_string(),
         })
     }
 }
@@ -211,4 +217,64 @@ pub(crate) async fn get_preferences() -> std::result::Result<Preferences, Error>
 #[specta::specta]
 pub(crate) async fn get_translation_models() -> std::result::Result<Vec<Model>, Error> {
     Ok(koharu_translator::Translator::models().await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn get_project_directory() -> std::result::Result<String, Error> {
+    let config = ProjectsConfig::load()?;
+    let dir = config.read()?.project_dir()?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn pick_project_directory(
+    window: tauri::WebviewWindow<tauri_runtime_cef::CefRuntime>,
+) -> std::result::Result<Option<String>, Error> {
+    let dialog = rfd::AsyncFileDialog::new()
+        .set_title("Select Project Directory")
+        .set_parent(&window);
+    let Some(folder) = dialog.pick_folder().await else {
+        return Ok(None);
+    };
+    Ok(Some(folder.path().to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn set_project_directory(
+    path: String,
+    library: State<'_, ProjectLibrary>,
+) -> std::result::Result<String, Error> {
+    let path_buf = std::path::PathBuf::from(&path);
+
+    // Validate the path
+    if !path_buf.is_absolute() {
+        return Err(Error::from(anyhow::anyhow!("project directory must be an absolute path")));
+    }
+
+    // Create directory if it doesn't exist
+    std::fs::create_dir_all(&path_buf)
+        .with_context(|| format!("failed to create project directory {}", path_buf.display()))?;
+
+    // Check if directory is writable
+    let test_file = path_buf.join(".koharu_write_test");
+    std::fs::write(&test_file, b"test")
+        .with_context(|| format!("project directory {} is not writable", path_buf.display()))?;
+    std::fs::remove_file(&test_file).ok();
+
+    // Save to config
+    let config = ProjectsConfig::load()?;
+    {
+        let mut current = config.write()?;
+        current.project_dir = Some(path_buf.clone());
+        current.save()?;
+    }
+
+    // Re-point the in-memory project library at the new root so the project
+    // list reflects the change without an application restart.
+    library.refresh()?;
+
+    Ok(path_buf.to_string_lossy().to_string())
 }

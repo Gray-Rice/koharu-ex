@@ -345,6 +345,19 @@
     "vramValue": "{{value}} 顯示記憶體"
   },
   "settings": {
+    "general": {
+      "title": "一般",
+      "description": "設定一般應用程式設定。",
+      "projectDirectory": "專案目錄",
+      "currentDirectory": "目前目錄",
+      "currentDirectoryDescription": "Koharu 儲存專案的目錄。",
+      "defaultDirectory": "文件/Koharu (預設)",
+      "newDirectory": "新目錄",
+      "newDirectoryDescription": "選擇用於儲存專案的新目錄。現有專案不會自動移動。",
+      "browse": "瀏覽…",
+      "save": "儲存",
+      "selectProjectDirectory": "選擇專案目錄"
+    },
     "appearance": {
       "description": "調整工作區外觀，而不改變圖稿的算繪方式。",
       "interface": "介面",
@@ -424,6 +437,7 @@
       "tools": "工具"
     },
     "tabs": {
+      "general": "一般",
       "appearance": "外觀",
       "pipeline": "流程",
       "providers": "提供者",

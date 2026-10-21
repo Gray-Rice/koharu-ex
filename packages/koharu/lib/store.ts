@@ -63,6 +63,7 @@ interface KoharuStore {
   processingStages: Stage[]
   settingsOpen: boolean
   shortcuts: Shortcuts
+  projectDirectory: string | null
   selectPages: (pages: EntityId[]) => void
   showInspector: (section: InspectorSection) => void
   setProcessingScope: (scope: PipelineScope) => void
@@ -75,6 +76,7 @@ interface KoharuStore {
   requestCanvasFit: () => void
   dismissJob: (id: string) => void
   dismissDownload: (id: number) => void
+  setProjectDirectory: (path: string) => void
 }
 
 export const defaultShortcuts: Shortcuts = {
@@ -113,6 +115,7 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
   processingStages: [...pipelineStages],
   settingsOpen: false,
   shortcuts: defaultShortcuts,
+  projectDirectory: null,
   selectPages: (selectedPages) => set({ selectedPages: [...new Set(selectedPages)] }),
   showInspector: (inspector) => set({ inspector }),
   setProcessingScope: (processingScope) => set({ processingScope }),
@@ -138,6 +141,7 @@ export const useKoharuStore = create<KoharuStore>()((set) => ({
       delete downloads[String(id)]
       return { downloads, dismissedDownloads: new Set(state.dismissedDownloads).add(String(id)) }
     }),
+  setProjectDirectory: (projectDirectory) => set({ projectDirectory }),
 }))
 
 export function receiveStartupState(state: StartupState): void {
@@ -173,7 +177,10 @@ export function receiveDownload(download: Download): void {
 }
 
 export function receivePreferences(preferences: Preferences): void {
-  useKoharuStore.setState({ preferences })
+  useKoharuStore.setState({
+    preferences,
+    projectDirectory: preferences.project_directory,
+  })
 }
 
 export function receiveTranslationModels(translationModels: Model[]): void {

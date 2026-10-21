@@ -345,6 +345,19 @@
     "vramValue": "{{value}} 显存"
   },
   "settings": {
+    "general": {
+      "title": "常规",
+      "description": "配置常规应用程序设置。",
+      "projectDirectory": "项目目录",
+      "currentDirectory": "当前目录",
+      "currentDirectoryDescription": "Koharu 存储项目的目录。",
+      "defaultDirectory": "文档/Koharu (默认)",
+      "newDirectory": "新目录",
+      "newDirectoryDescription": "选择用于存储项目的新目录。现有项目不会自动移动。",
+      "browse": "浏览…",
+      "save": "保存",
+      "selectProjectDirectory": "选择项目目录"
+    },
     "appearance": {
       "description": "调整工作区外观，而不改变图稿的渲染方式。",
       "interface": "界面",
@@ -424,6 +437,7 @@
       "tools": "工具"
     },
     "tabs": {
+      "general": "常规",
       "appearance": "外观",
       "pipeline": "流水线",
       "providers": "提供商",

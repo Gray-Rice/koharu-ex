@@ -73,6 +73,18 @@ export function refreshTranslationModels(force = false): Promise<void> {
   return request
 }
 
+export async function getProjectDirectory(): Promise<string> {
+  return call(commands.getProjectDirectory)
+}
+
+export async function pickProjectDirectory(): Promise<string | null> {
+  return call(commands.pickProjectDirectory)
+}
+
+export async function setProjectDirectory(path: string): Promise<string> {
+  return call(commands.setProjectDirectory, path)
+}
+
 function report(error: unknown): Error {
   const message =
     error instanceof Error

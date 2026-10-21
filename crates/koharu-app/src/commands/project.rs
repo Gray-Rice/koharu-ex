@@ -1,4 +1,4 @@
-use std::{collections::HashSet, io::Cursor, path::PathBuf};
+use std::{collections::HashSet, io::Cursor, path::PathBuf, sync::{Arc, Mutex}};
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use image::{DynamicImage, ImageFormat, RgbaImage};
@@ -13,12 +13,13 @@ use koharu_scene::{
 };
 use serde::Serialize;
 use specta::Type;
-use tokio::sync::Mutex;
+use tokio::sync::Mutex as TokioMutex;
 
 use super::{
     canvas::Point,
     editing::{GeometryUpdate, TypographyUpdate},
 };
+use crate::config::ProjectsConfig;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RasterStrokeMode {
@@ -177,22 +178,31 @@ pub struct Typography {
 }
 
 pub(crate) struct CurrentProject {
-    pub(crate) project: Mutex<Option<Project>>,
+    pub(crate) project: TokioMutex<Option<Project>>,
 }
 
 #[derive(Clone)]
 pub(crate) struct ProjectLibrary {
-    root: PathBuf,
+    root: Arc<Mutex<PathBuf>>,
 }
 
 impl ProjectLibrary {
     pub(crate) fn new() -> Result<Self> {
-        let root = dirs::document_dir()
-            .context("the Documents directory is unavailable")?
-            .join("Koharu");
+        let config = ProjectsConfig::load()?;
+        let root = config.read()?.project_dir()?;
         std::fs::create_dir_all(&root)
             .with_context(|| format!("failed to create {}", root.display()))?;
-        Ok(Self { root })
+        Ok(Self { root: Arc::new(Mutex::new(root)) })
+    }
+
+    /// Refresh the project library root from the config.
+    pub(crate) fn refresh(&self) -> Result<()> {
+        let config = ProjectsConfig::load()?;
+        let root = config.read()?.project_dir()?;
+        std::fs::create_dir_all(&root)
+            .with_context(|| format!("failed to create {}", root.display()))?;
+        *self.root.lock().unwrap() = root;
+        Ok(())
     }
 
     pub(crate) fn list(&self) -> Result<Vec<ProjectSummary>> {
@@ -204,8 +214,9 @@ impl ProjectLibrary {
     }
 
     fn list_internal(&self, include_archived: bool) -> Result<Vec<ProjectSummary>> {
-        let mut projects = std::fs::read_dir(&self.root)
-            .with_context(|| format!("failed to read {}", self.root.display()))?
+        let root = self.root.lock().unwrap().clone();
+        let mut projects = std::fs::read_dir(&root)
+            .with_context(|| format!("failed to read {}", root.display()))?
             .filter_map(|entry| entry.ok())
             .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
             .filter_map(|entry| {
@@ -303,7 +314,8 @@ impl ProjectLibrary {
 
     fn resolve(&self, name: &str) -> Result<(String, PathBuf)> {
         let name = validate_project_name(name)?;
-        Ok((name.clone(), self.root.join(format!("{name}.khrproj"))))
+        let root = self.root.lock().unwrap().clone();
+        Ok((name.clone(), root.join(format!("{name}.khrproj"))))
     }
 }
 

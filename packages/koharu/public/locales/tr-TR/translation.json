@@ -345,6 +345,19 @@
     "vramValue": "{{value}} VRAM"
   },
   "settings": {
+    "general": {
+      "title": "Genel",
+      "description": "Genel uygulama ayarlarını yapılandırın.",
+      "projectDirectory": "Proje Dizini",
+      "currentDirectory": "Mevcut Dizin",
+      "currentDirectoryDescription": "Koharu'nun projeleri depoladığı dizin.",
+      "defaultDirectory": "Belgeler/Koharu (varsayılan)",
+      "newDirectory": "Yeni Dizin",
+      "newDirectoryDescription": "Projeleri depolamak için yeni bir dizin seçin. Mevcut projeler otomatik olarak taşınmaz.",
+      "browse": "Gözat…",
+      "save": "Kaydet",
+      "selectProjectDirectory": "Proje Dizini Seç"
+    },
     "appearance": {
       "description": "Çizimin işlenişini değiştirmeden çalışma alanını ortamınıza uyarlayın.",
       "interface": "Arayüz",
@@ -424,6 +437,7 @@
       "tools": "Araçlar"
     },
     "tabs": {
+      "general": "Genel",
       "appearance": "Görünüm",
       "pipeline": "İşlem hattı",
       "providers": "Sağlayıcılar",

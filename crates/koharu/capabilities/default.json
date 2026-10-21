@@ -16,6 +16,9 @@
     "core:window:allow-set-progress-bar",
     "opener:default",
     "process:default",
-    "updater:default"
+    "updater:default",
+    "dialog:default",
+    "dialog:allow-open",
+    "dialog:allow-save"
   ]
 }

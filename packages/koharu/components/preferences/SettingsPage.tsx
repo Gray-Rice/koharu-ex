@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   Cpu,
+  FolderOpen,
   KeyRound,
   Keyboard,
   Languages,
@@ -46,6 +47,7 @@ import {
 } from '@koharu/ui/components/select'
 
 const tabs = [
+  ['general', FolderOpen],
   ['appearance', Palette],
   ['pipeline', Cpu],
   ['providers', KeyRound],
@@ -197,6 +199,7 @@ export function SettingsPage() {
         </header>
         <ScrollArea className='min-h-0 flex-1'>
           <div className='mx-auto w-full max-w-4xl px-10 py-10'>
+            {tab === 'general' && <GeneralPreferences />}
             {tab === 'appearance' && <AppearancePreferences />}
             {tab === 'pipeline' &&
               (pipeline ? (
@@ -337,6 +340,93 @@ function ShortcutPreferences() {
 function LoadingPreferences() {
   const { t } = useTranslation()
   return <p className='py-10 text-[12px] text-muted-foreground'>{t('settings.loading')}</p>
+}
+
+function GeneralPreferences() {
+  const { t } = useTranslation()
+  const projectDirectory = useKoharuStore((state) => state.projectDirectory)
+  const setProjectDirectory = useKoharuStore((state) => state.setProjectDirectory)
+  const [inputPath, setInputPath] = useState(projectDirectory ?? '')
+  const [isSelecting, setIsSelecting] = useState(false)
+
+  const handleSelectDirectory = async () => {
+    setIsSelecting(true)
+    try {
+      const { pickProjectDirectory } = await import('@/lib/backend')
+      const selected = await pickProjectDirectory()
+      if (selected) {
+        setInputPath(selected)
+      }
+    } catch (error) {
+      console.error('Failed to open directory dialog:', error)
+    } finally {
+      setIsSelecting(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!inputPath.trim()) return
+    try {
+      const { setProjectDirectory: setProjectDirectoryBackend } = await import('@/lib/backend')
+      const { refreshPreferences } = await import('@/lib/backend')
+      const savedPath = await setProjectDirectoryBackend(inputPath)
+      setProjectDirectory(savedPath)
+      setInputPath(savedPath)
+      // Refresh the project list to reflect the new directory
+      await refreshPreferences()
+    } catch (error) {
+      console.error('Failed to set project directory:', error)
+    }
+  }
+
+  return (
+    <PreferencePage
+      title={t('settings.general.title')}
+      description={t('settings.general.description')}
+    >
+      <PreferenceSection title={t('settings.general.projectDirectory')}>
+        <PreferenceRow
+          title={t('settings.general.currentDirectory')}
+          description={t('settings.general.currentDirectoryDescription')}
+        >
+          <div className='flex items-center gap-2'>
+            <code className='flex-1 text-[11px] bg-muted px-2 py-1 rounded font-mono truncate'>{projectDirectory ?? t('settings.general.defaultDirectory')}</code>
+          </div>
+        </PreferenceRow>
+        <PreferenceRow
+          title={t('settings.general.newDirectory')}
+          description={t('settings.general.newDirectoryDescription')}
+        >
+          <div className='flex items-center gap-2'>
+            <Input
+              value={inputPath}
+              onChange={(e) => setInputPath(e.target.value)}
+              placeholder={t('settings.general.defaultDirectory')}
+              className='flex-1 text-[11px]'
+              disabled={isSelecting}
+            />
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              onClick={handleSelectDirectory}
+              disabled={isSelecting}
+            >
+              {t('settings.general.browse')}
+            </Button>
+            <Button
+              type='button'
+              size='sm'
+              onClick={handleSave}
+              disabled={!inputPath.trim() || inputPath === projectDirectory}
+            >
+              {t('settings.general.save')}
+            </Button>
+          </div>
+        </PreferenceRow>
+      </PreferenceSection>
+    </PreferencePage>
+  )
 }
 
 const shortcutKeys: Record<ShortcutAction, string> = {

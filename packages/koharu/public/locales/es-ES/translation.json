@@ -345,6 +345,19 @@
     "vramValue": "{{value}} de VRAM"
   },
   "settings": {
+    "general": {
+      "title": "General",
+      "description": "Configura los ajustes generales de la aplicación.",
+      "projectDirectory": "Directorio de Proyectos",
+      "currentDirectory": "Directorio Actual",
+      "currentDirectoryDescription": "El directorio donde Koharu almacena tus proyectos.",
+      "defaultDirectory": "Documentos/Koharu (predeterminado)",
+      "newDirectory": "Nuevo Directorio",
+      "newDirectoryDescription": "Selecciona un nuevo directorio para almacenar proyectos. Los proyectos existentes no se moverán automáticamente.",
+      "browse": "Examinar…",
+      "save": "Guardar",
+      "selectProjectDirectory": "Seleccionar Directorio de Proyectos"
+    },
     "appearance": {
       "description": "Adapta el espacio de trabajo a tu entorno sin cambiar cómo se renderiza la ilustración.",
       "interface": "Interfaz",
@@ -424,6 +437,7 @@
       "tools": "Herramientas"
     },
     "tabs": {
+      "general": "General",
       "appearance": "Apariencia",
       "pipeline": "Canalización",
       "providers": "Proveedores",

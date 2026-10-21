@@ -50,6 +50,7 @@ const preferences: Preferences = {
     font_families: ['CCWildWords', 'Adobe 黑体 Std'],
   },
   languages: [],
+  project_directory: '/home/user/Documents/Koharu',
 }
 
 const project: ProjectInfo = {

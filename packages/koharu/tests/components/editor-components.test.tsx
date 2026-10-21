@@ -52,7 +52,10 @@ const nativeWindow = vi.hoisted(() => ({
   toggleMaximize: vi.fn(async () => undefined),
 }))
 const nativeOpenUrl = vi.hoisted(() => vi.fn(async () => undefined))
-const nativeGetVersion = vi.hoisted(() => vi.fn(async () => '0.62.0'))
+const { nativeGetVersion, mockedVersion } = vi.hoisted(() => {
+  const version = '0.62.0'
+  return { nativeGetVersion: vi.fn(async () => version), mockedVersion: version }
+})
 
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => nativeWindow }))
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: nativeGetVersion }))
@@ -186,6 +189,7 @@ const preferences: Preferences = {
     { tag: 'en-US', name: 'English' },
     { tag: 'ja-JP', name: 'Japanese' },
   ],
+  project_directory: '/home/user/Documents/Koharu',
 }
 
 function installProject() {
@@ -483,7 +487,7 @@ describe('greenfield editor', () => {
 
 
     expect(await screen.findByRole('heading', { name: 'Koharu-EX' })).toBeInTheDocument()
-    expect(await screen.findByText('0.83.1')).toBeInTheDocument()
+    expect(await screen.findByText(mockedVersion)).toBeInTheDocument()
     expect(screen.getByText('GrayRice')).toBeInTheDocument()
     expect(nativeGetVersion).toHaveBeenCalledTimes(1)
   })

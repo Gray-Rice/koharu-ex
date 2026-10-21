@@ -4597,11 +4597,12 @@ dependencies = [
  "koharu-app",
  "koharu-metrics",
  "log",
- "rfd",
+ "rfd 0.17.2",
  "sentry",
  "serde_json",
  "tauri",
  "tauri-build",
+ "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tauri-plugin-updater",
@@ -4646,6 +4647,7 @@ dependencies = [
  "hayro",
  "image",
  "koharu-agent",
+ "koharu-config",
  "koharu-desktop",
  "koharu-metrics",
  "koharu-ml",
@@ -4661,7 +4663,7 @@ dependencies = [
  "parking_lot",
  "rars",
  "rayon",
- "rfd",
+ "rfd 0.17.2",
  "schemars 1.2.2",
  "serde",
  "serde_json",
@@ -4669,6 +4671,7 @@ dependencies = [
  "specta-typescript",
  "strum",
  "tauri",
+ "tauri-plugin-dialog",
  "tauri-plugin-log",
  "tauri-plugin-opener",
  "tauri-plugin-process",
@@ -7831,6 +7834,30 @@ dependencies = [
 
 [[package]]
 name = "rfd"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a15ad77d9e70a92437d8f74c35d99b4e4691128df018833e99f90bcd36152672"
+dependencies = [
+ "block2",
+ "dispatch2",
+ "glib-sys",
+ "gobject-sys",
+ "gtk-sys",
+ "js-sys",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-foundation",
+ "raw-window-handle",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
+name = "rfd"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20dafead71c16a34e1ff357ddefc8afc11e7d51d6d2b9fbd07eaa48e3e540220"
@@ -9347,6 +9374,44 @@ dependencies = [
  "serde_json",
  "tauri-utils",
  "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-dialog"
+version = "2.7.1"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=835adce473e8f059f6ba84660dd07bcb19fb9030#835adce473e8f059f6ba84660dd07bcb19fb9030"
+dependencies = [
+ "log",
+ "raw-window-handle",
+ "rfd 0.16.0",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "tauri-plugin-fs",
+ "thiserror 2.0.20",
+ "url",
+]
+
+[[package]]
+name = "tauri-plugin-fs"
+version = "2.5.1"
+source = "git+https://github.com/tauri-apps/plugins-workspace?rev=835adce473e8f059f6ba84660dd07bcb19fb9030#835adce473e8f059f6ba84660dd07bcb19fb9030"
+dependencies = [
+ "anyhow",
+ "dunce",
+ "glob",
+ "log",
+ "objc2-foundation",
+ "percent-encoding",
+ "schemars 1.2.2",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.20",
+ "url",
 ]
 
 [[package]]

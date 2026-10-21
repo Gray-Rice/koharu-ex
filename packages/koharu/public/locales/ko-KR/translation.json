@@ -345,6 +345,19 @@
     "vramValue": "VRAM {{value}}"
   },
   "settings": {
+    "general": {
+      "title": "일반",
+      "description": "일반 애플리케이션 설정을 구성합니다.",
+      "projectDirectory": "프로젝트 디렉토리",
+      "currentDirectory": "현재 디렉토리",
+      "currentDirectoryDescription": "Koharu가 프로젝트를 저장하는 디렉토리입니다.",
+      "defaultDirectory": "문서/Koharu (기본값)",
+      "newDirectory": "새 디렉토리",
+      "newDirectoryDescription": "프로젝트 저장을 위한 새 디렉토리를 선택합니다. 기존 프로젝트는 자동으로 이동되지 않습니다.",
+      "browse": "찾아보기…",
+      "save": "저장",
+      "selectProjectDirectory": "프로젝트 디렉토리 선택"
+    },
     "appearance": {
       "description": "아트워크 렌더링에는 영향을 주지 않고 작업 공간의 모습을 조정합니다.",
       "interface": "인터페이스",
@@ -424,6 +437,7 @@
       "tools": "도구"
     },
     "tabs": {
+      "general": "일반",
       "appearance": "모양",
       "pipeline": "파이프라인",
       "providers": "제공자",

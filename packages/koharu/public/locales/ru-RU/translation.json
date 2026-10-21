@@ -345,6 +345,19 @@
     "vramValue": "Видеопамять: {{value}}"
   },
   "settings": {
+    "general": {
+      "title": "Общие",
+      "description": "Настройте общие параметры приложения.",
+      "projectDirectory": "Директория проектов",
+      "currentDirectory": "Текущая директория",
+      "currentDirectoryDescription": "Директория, где Koharu хранит ваши проекты.",
+      "defaultDirectory": "Документы/Koharu (по умолчанию)",
+      "newDirectory": "Новая директория",
+      "newDirectoryDescription": "Выберите новую директорию для хранения проектов. Существующие проекты не будут перемещены автоматически.",
+      "browse": "Обзор…",
+      "save": "Сохранить",
+      "selectProjectDirectory": "Выбрать директорию проектов"
+    },
     "appearance": {
       "description": "Настройте вид рабочего пространства, не меняя отрисовку изображения.",
       "interface": "Интерфейс",
@@ -424,6 +437,7 @@
       "tools": "Инструменты"
     },
     "tabs": {
+      "general": "Общие",
       "appearance": "Оформление",
       "pipeline": "Конвейер",
       "providers": "Провайдеры",
